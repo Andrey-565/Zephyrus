@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface Feature {
   title: string;
@@ -30,6 +31,7 @@ interface Data {
 }
 
 export default function HomePage() {
+  const navigate = useNavigate();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -150,7 +152,7 @@ export default function HomePage() {
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
           </div>
         </button>
-        <button className="w-[45px] h-[45px] rounded-full bg-[var(--btn-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-main)] shadow-[0_4px_10px_var(--shadow-color)] hover:scale-110 hover:bg-[var(--btn-hover)] hover:text-[#8b5cf6] transition-all duration-300" aria-label="Личный кабинет">
+        <button onClick={() => navigate('/auth')} className="w-[45px] h-[45px] rounded-full bg-[var(--btn-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-main)] shadow-[0_4px_10px_var(--shadow-color)] hover:scale-110 hover:bg-[var(--btn-hover)] hover:text-[#8b5cf6] transition-all duration-300" aria-label="Личный кабинет">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
         </button>
       </div>
