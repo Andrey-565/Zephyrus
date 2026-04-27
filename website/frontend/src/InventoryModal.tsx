@@ -28,7 +28,8 @@ const COLS = 9;
 
 function getItemIcon(itemType: string): string {
   const name = itemType.replace('minecraft:', '');
-  return `https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/${name}.png`;
+  // Primary: Rendered 3D icons (best for blocks and items)
+  return `https://render.crafty.gg/3d/item/${name}`;
 }
 
 export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange }: Props) {
@@ -145,8 +146,16 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
                       <img
                         src={getItemIcon(item.item_type)}
                         alt={item.item_name}
-                        className="w-8 h-8 object-contain pixelated"
-                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/barrier.png'; }}
+                        className="w-10 h-10 object-contain pixelated group-hover:scale-110 transition-transform"
+                        onError={(e) => { 
+                          const target = e.target as HTMLImageElement;
+                          const name = item.item_type.replace('minecraft:', '');
+                          if (!target.src.includes('mcasset.cloud')) {
+                            target.src = `https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/${name}.png`;
+                          } else {
+                            target.src = 'https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/barrier.png';
+                          }
+                        }}
                       />
                       {item.item_count > 1 && (
                         <span className="absolute bottom-0.5 right-1 text-white text-[9px] font-black drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">{item.item_count}</span>
