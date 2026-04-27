@@ -66,9 +66,20 @@ public class InventoryListener implements Listener {
             first = false;
 
             String itemType = "minecraft:" + item.getType().name().toLowerCase();
-            String itemName = item.hasItemMeta() && item.getItemMeta().hasDisplayName()
-                ? item.getItemMeta().getDisplayName().replace("§f", "")
-                : item.getType().name();
+            String itemName = item.getType().name();
+            if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                itemName = item.getItemMeta().getDisplayName().replaceAll("§[0-9a-fk-or]", "");
+            } else {
+                // Prettify material name (ACACIA_STAIRS -> Acacia Stairs)
+                String[] parts = itemName.toLowerCase().split("_");
+                StringBuilder sb = new StringBuilder();
+                for (String p : parts) {
+                    if (!p.isEmpty()) {
+                        sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1)).append(" ");
+                    }
+                }
+                itemName = sb.toString().trim();
+            }
             int count = item.getAmount();
 
             itemsJson.append(String.format(

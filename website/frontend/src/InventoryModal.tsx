@@ -132,11 +132,10 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
               return (
                 <div
                   key={i}
-                  title={item ? `${item.item_name} ×${item.item_count}` : unlocked ? 'Пусто' : 'Заблокировано'}
-                  className={`relative aspect-square rounded-lg flex items-center justify-center text-[10px] font-black transition-all
+                  className={`relative aspect-square rounded-lg flex items-center justify-center text-[10px] font-black transition-all group
                     ${unlocked
                       ? item
-                        ? 'bg-[var(--feature-bg)] border border-[var(--border-color)] hover:border-purple-500/50 cursor-pointer'
+                        ? 'bg-[var(--feature-bg)] border border-[var(--border-color)] hover:border-purple-500/50 cursor-pointer shadow-lg shadow-black/5'
                         : 'bg-white/[0.04] border border-[var(--border-color)] border-dashed'
                       : 'bg-black/20 border border-black/10 cursor-not-allowed'
                     }`}
