@@ -55,7 +55,7 @@ export default function DashboardPage() {
       }
 
       try {
-        const res = await fetch('http://localhost:8000/api/auth/me', {
+        const res = await fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -147,7 +147,7 @@ export default function DashboardPage() {
     setExchangeLoading(true);
     try {
       const token = localStorage.getItem('zephyrus-token');
-      const res = await fetch('http://localhost:8000/api/inventory/convert-to-diamond', {
+      const res = await fetch('/api/inventory/convert-to-diamond', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`
@@ -175,7 +175,7 @@ export default function DashboardPage() {
 
     try {
       const token = localStorage.getItem('zephyrus-token');
-      const res = await fetch('http://localhost:8000/api/auth/delete-account', {
+      const res = await fetch('/api/auth/delete-account', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

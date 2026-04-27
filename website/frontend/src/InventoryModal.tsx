@@ -47,10 +47,18 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
 
   const fetchInv = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/inventory', {
+      setLoading(true);
+      const res = await fetch('/api/inventory', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setInv(await res.json());
+      if (res.ok) {
+        setInv(await res.json());
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'Ошибка загрузки инвентаря', false);
+      }
+    } catch (err) {
+      showToast('Ошибка соединения с сервером', false);
     } finally {
       setLoading(false);
     }
@@ -61,10 +69,11 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
   const handleUnlock = async () => {
     if (!inv?.next_unlock_cost) return;
     setUnlocking(true);
-    const res = await fetch('http://localhost:8000/api/inventory/unlock', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    try {
+      const res = await fetch('/api/inventory/unlock', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
     const data = await res.json();
     if (res.ok) {
       showToast(data.message, true);
@@ -78,7 +87,9 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
   };
 
   const itemMap = new Map<number, InventoryItem>();
-  inv?.items.forEach(i => itemMap.set(i.slot, i));
+  if (inv && inv.items) {
+    inv.items.forEach(i => itemMap.set(i.slot, i));
+  }
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
