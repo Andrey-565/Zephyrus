@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+type AuthStep = 'login' | 'register' | 'verify_register' | 'forgot_pwd_email' | 'forgot_pwd_code' | 'forgot_pwd_new';
+
 export default function AuthPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [step, setStep] = useState<AuthStep>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -19,11 +21,25 @@ export default function AuthPage() {
   const [regUser, setRegUser] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPwd, setRegPwd] = useState('');
+
+  // Verification / Reset state
+  const [verifyCode, setVerifyCode] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
   
   // Theme state
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('zephyrus-theme') as 'dark' | 'light') || 'dark';
   });
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -106,10 +122,89 @@ export default function AuthPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setSuccessMsg('Регистрация успешна! Теперь вы можете войти.');
-        setActiveTab('login');
+        setSuccessMsg('Код подтверждения отправлен на вашу почту!');
+        setStep('verify_register');
+        setResendTimer(60);
       } else {
         setErrorMsg(data.detail || 'Ошибка регистрации');
+      }
+    } catch (err) {
+      setErrorMsg('Ошибка соединения с сервером');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyCode.length !== 6) return setErrorMsg('Введите 6-значный код');
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: regEmail, code: verifyCode })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('zephyrus-token', data.access_token);
+        setSuccessMsg('Email успешно подтвержден! Перенаправляем...');
+        setTimeout(() => navigate('/'), 1500);
+      } else {
+        setErrorMsg(data.detail || 'Ошибка проверки кода');
+      }
+    } catch (err) {
+      setErrorMsg('Ошибка соединения с сервером');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateEmail(forgotEmail)) return setErrorMsg('Некорректный Email');
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg('Если аккаунт существует, код отправлен на почту');
+        setStep('forgot_pwd_code');
+        setResendTimer(60);
+      } else {
+        setErrorMsg(data.detail || 'Ошибка');
+      }
+    } catch (err) {
+      setErrorMsg('Ошибка соединения с сервером');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyCode.length !== 6) return setErrorMsg('Введите 6-значный код');
+    if (newPwd.length < 8) return setErrorMsg('Пароль должен быть от 8 символов');
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail, code: verifyCode, new_password: newPwd })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg('Пароль успешно изменен! Теперь вы можете войти.');
+        setStep('login');
+      } else {
+        setErrorMsg(data.detail || 'Ошибка');
       }
     } catch (err) {
       setErrorMsg('Ошибка соединения с сервером');
@@ -150,32 +245,34 @@ export default function AuthPage() {
         
         <div className="mb-8">
           <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#8b5cf6] to-[#3b82f6] mb-2 tracking-tight">
-            {activeTab === 'login' ? 'Добро пожаловать' : 'Присоединяйтесь'}
+            {step === 'login' ? 'Добро пожаловать' : 'Присоединяйтесь'}
           </h1>
           <p className="text-[var(--text-secondary)] text-[0.95rem]">
-            {activeTab === 'login' ? 'Войдите в свой аккаунт Zephyrus' : 'Создайте аккаунт и начните игру'}
+            {step === 'login' ? 'Войдите в свой аккаунт Zephyrus' : 'Создайте аккаунт и начните игру'}
           </p>
         </div>
 
         {/* Tabs */}
-        <div className="flex bg-[var(--tab-bg)] rounded-xl p-[6px] mb-8 relative border border-[var(--glass-border)] transition-colors duration-500">
-          <div 
-            className="absolute top-[6px] bottom-[6px] w-[calc(50%-6px)] bg-[var(--tab-active-bg)] rounded-lg shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] z-[1]"
-            style={{ transform: activeTab === 'login' ? 'translateX(0)' : 'translateX(100%)' }}
-          ></div>
-          <button 
-            onClick={() => { setActiveTab('login'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 py-3 text-sm font-bold rounded-lg relative z-[2] transition-colors duration-300 ${activeTab === 'login' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
-          >
-            Вход
-          </button>
-          <button 
-            onClick={() => { setActiveTab('register'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 py-3 text-sm font-bold rounded-lg relative z-[2] transition-colors duration-300 ${activeTab === 'register' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
-          >
-            Регистрация
-          </button>
-        </div>
+        {(step === 'login' || step === 'register') && (
+          <div className="flex bg-[var(--tab-bg)] rounded-xl p-[6px] mb-8 relative border border-[var(--glass-border)] transition-colors duration-500">
+            <div 
+              className="absolute top-[6px] bottom-[6px] w-[calc(50%-6px)] bg-[var(--tab-active-bg)] rounded-lg shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] z-[1]"
+              style={{ transform: step === 'login' ? 'translateX(0)' : 'translateX(100%)' }}
+            ></div>
+            <button 
+              onClick={() => { setStep('login'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-3 text-sm font-bold rounded-lg relative z-[2] transition-colors duration-300 ${step === 'login' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
+            >
+              Вход
+            </button>
+            <button 
+              onClick={() => { setStep('register'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-3 text-sm font-bold rounded-lg relative z-[2] transition-colors duration-300 ${step === 'register' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
+            >
+              Регистрация
+            </button>
+          </div>
+        )}
 
         {/* Alerts */}
         {errorMsg && (
@@ -190,7 +287,7 @@ export default function AuthPage() {
         )}
 
         {/* Login Form */}
-        {activeTab === 'login' && (
+        {step === 'login' && (
           <form onSubmit={handleLogin} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
             <div className="flex flex-col gap-2">
               <label className="text-[0.8rem] font-bold text-[var(--text-secondary)] uppercase tracking-wide">Логин или Email</label>
@@ -206,7 +303,7 @@ export default function AuthPage() {
             <div className="flex flex-col gap-2 relative">
               <div className="flex justify-between items-center">
                 <label className="text-[0.8rem] font-bold text-[var(--text-secondary)] uppercase tracking-wide">Пароль</label>
-                <span onClick={() => setShowDiscordModal(true)} className="text-[0.8rem] text-[#3b82f6] font-semibold cursor-pointer hover:underline opacity-80 hover:opacity-100 transition-opacity">Забыли пароль?</span>
+                <span onClick={() => { setStep('forgot_pwd_email'); setErrorMsg(''); setSuccessMsg(''); }} className="text-[0.8rem] text-[#3b82f6] font-semibold cursor-pointer hover:underline opacity-80 hover:opacity-100 transition-opacity">Забыли пароль?</span>
               </div>
               <div className="relative">
                 <input 
@@ -237,7 +334,7 @@ export default function AuthPage() {
         )}
 
         {/* Register Form */}
-        {activeTab === 'register' && (
+        {step === 'register' && (
           <form onSubmit={handleRegister} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
             <div className="flex flex-col gap-2">
               <label className="text-[0.8rem] font-bold text-[var(--text-secondary)] uppercase tracking-wide">Игровой никнейм</label>
@@ -290,6 +387,112 @@ export default function AuthPage() {
               ) : (
                 'Создать аккаунт'
               )}
+            </button>
+          </form>
+        )}
+
+        {/* Verify Email Flow */}
+        {step === 'verify_register' && (
+          <form onSubmit={handleVerifyEmail} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
+            <div className="text-center mb-2">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">Подтверждение Email</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">Введите 6-значный код, отправленный на {regEmail}</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input 
+                type="text" 
+                maxLength={6}
+                value={verifyCode}
+                onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-5 py-4 rounded-xl bg-black/5 border border-[var(--border-color)] text-[var(--text-main)] text-center text-2xl tracking-[1em] font-mono outline-none focus:border-[#3b82f6] transition-all"
+                placeholder="000000"
+              />
+            </div>
+            <button disabled={loading} type="submit" className="w-full h-[56px] bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold rounded-xl transition-colors flex items-center justify-center">
+              {loading ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Подтвердить'}
+            </button>
+            <div className="text-center mt-2">
+              {resendTimer > 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">Отправить код повторно через {resendTimer}с</p>
+              ) : (
+                <button type="button" onClick={handleRegister} className="text-sm text-[#3b82f6] font-bold hover:underline">Отправить код еще раз</button>
+              )}
+            </div>
+            <button type="button" onClick={() => setStep('register')} className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--text-main)] transition-colors">Вернуться назад</button>
+          </form>
+        )}
+
+        {/* Forgot Password Flow */}
+        {step === 'forgot_pwd_email' && (
+          <form onSubmit={handleForgotPassword} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
+            <div className="text-center mb-2">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">Восстановление пароля</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">Введите вашу почту для получения кода</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input 
+                type="email" 
+                value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)}
+                className="w-full px-5 py-4 rounded-xl bg-black/5 border border-[var(--border-color)] text-[var(--text-main)] outline-none focus:border-[#3b82f6] transition-all"
+                placeholder="name@example.com"
+              />
+            </div>
+            <button disabled={loading} type="submit" className="w-full h-[56px] bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold rounded-xl transition-colors flex items-center justify-center">
+              {loading ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Отправить код'}
+            </button>
+            <button type="button" onClick={() => setStep('login')} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-main)] transition-colors">Вернуться к входу</button>
+          </form>
+        )}
+
+        {step === 'forgot_pwd_code' && (
+          <form onSubmit={(e) => { e.preventDefault(); setStep('forgot_pwd_new'); }} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
+            <div className="text-center mb-2">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">Введите код</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">Код отправлен на {forgotEmail}</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <input 
+                type="text" 
+                maxLength={6}
+                value={verifyCode}
+                onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-5 py-4 rounded-xl bg-black/5 border border-[var(--border-color)] text-[var(--text-main)] text-center text-2xl tracking-[1em] font-mono outline-none focus:border-[#3b82f6] transition-all"
+                placeholder="000000"
+              />
+            </div>
+            <button type="submit" className="w-full h-[56px] bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold rounded-xl transition-colors">Продолжить</button>
+            <div className="text-center mt-2">
+              {resendTimer > 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">Отправить код повторно через {resendTimer}с</p>
+              ) : (
+                <button type="button" onClick={handleForgotPassword} className="text-sm text-[#3b82f6] font-bold hover:underline">Отправить код еще раз</button>
+              )}
+            </div>
+            <button type="button" onClick={() => setStep('forgot_pwd_email')} className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--text-main)] transition-colors">Изменить почту</button>
+          </form>
+        )}
+
+        {step === 'forgot_pwd_new' && (
+          <form onSubmit={handleResetPassword} className="flex flex-col gap-6 text-left animate-[authFadeIn_0.5s_ease-out]">
+            <div className="text-center mb-2">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">Новый пароль</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">Придумайте новый надежный пароль</p>
+            </div>
+            <div className="flex flex-col gap-2 relative">
+              <input 
+                type={showNewPwd ? "text" : "password"} 
+                value={newPwd}
+                onChange={e => setNewPwd(e.target.value)}
+                className="w-full px-5 py-4 pr-12 rounded-xl bg-black/5 border border-[var(--border-color)] text-[var(--text-main)] outline-none focus:border-[#3b82f6] transition-all"
+                placeholder="Новый пароль"
+              />
+              <button type="button" onClick={() => setShowNewPwd(!showNewPwd)} className="absolute right-4 top-[50%] -translate-y-[50%] text-[var(--text-secondary)]">
+                {showNewPwd ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+              </button>
+            </div>
+            <button disabled={loading} type="submit" className="w-full h-[56px] bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold rounded-xl transition-colors flex items-center justify-center">
+              {loading ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Обновить пароль'}
             </button>
           </form>
         )}

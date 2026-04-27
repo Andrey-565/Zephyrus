@@ -1,12 +1,27 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 import jwt
+import os
+import smtplib
+import random
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Настройки SMTP
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+
 
 # Настройки базы данных PostgreSQL (локальный сервер)
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/zephyrus"
@@ -25,6 +40,15 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    is_verified = Column(Boolean, default=False)
+
+class VerificationCode(Base):
+    __tablename__ = "verification_codes"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    code = Column(String, index=True)
+    purpose = Column(String) # 'register', 'reset'
+    expires_at = Column(DateTime)
 
 # Создание таблиц (при старте)
 try:
@@ -44,9 +68,21 @@ class UserRegister(BaseModel):
     email: str
     password: str
 
+class VerifyEmail(BaseModel):
+    email: str
+    code: str
+
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class ForgotPassword(BaseModel):
+    email: str
+
+class ResetPassword(BaseModel):
+    email: str
+    code: str
+    new_password: str
 
 def get_db():
     db = SessionLocal()
@@ -78,22 +114,128 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def get_email_template(title: str, subtitle: str, code: str):
+    return f"""
+    <html>
+    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #ffffff;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 24px; padding: 40px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+                <div style="margin-bottom: 30px;">
+                    <h1 style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -1px; background: linear-gradient(to right, #8b5cf6, #3b82f6); -webkit-background-clip: text; color: #3b82f6;">ZEPHYRUS</h1>
+                </div>
+                <h2 style="margin: 0 0 10px 0; font-size: 24px; font-weight: 700;">{title}</h2>
+                <p style="margin: 0 0 30px 0; color: #94a3b8; font-size: 16px;">{subtitle}</p>
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px dashed #3b82f6; border-radius: 16px; padding: 20px; margin-bottom: 30px;">
+                    <span style="font-family: monospace; font-size: 42px; font-weight: 900; letter-spacing: 10px; color: #ffffff;">{code}</span>
+                </div>
+                <p style="margin: 0; color: #64748b; font-size: 14px;">Код действителен в течение 15 минут.<br>Если вы не запрашивали это письмо, просто проигнорируйте его.</p>
+                <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #334155;">
+                    <p style="margin: 0; color: #475569; font-size: 12px;">&copy; 2026 Zephyrus Project. Все права защищены.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+def send_email(to_email: str, subject: str, html_content: str):
+    print(f"\n[EMAIL SIMULATION] To: {to_email} | Subject: {subject}")
+    print(f"[EMAIL CONTENT] {html_content}\n")
+    
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print("[!] SMTP credentials missing in .env. Email was only simulated in console.")
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = f"Zephyrus <{SMTP_USER}>"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(html_content, 'html'))
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"Email successfully sent to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email via SMTP: {e}")
+
 @app.post("/api/auth/register")
 def register(user: UserRegister, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
-    if db_user:
+    # Allow registration if username exists but is NOT verified
+    if db_user and db_user.is_verified:
         raise HTTPException(status_code=400, detail="Этот никнейм уже занят")
     
     db_email = db.query(User).filter(User.email == user.email).first()
-    if db_email:
+    if db_email and db_email.is_verified:
         raise HTTPException(status_code=400, detail="Эта почта уже используется")
         
     hashed_password = get_password_hash(user.password)
-    new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
-    db.add(new_user)
+    
+    if db_user and not db_user.is_verified:
+        # Update unverified user with new data (maybe they changed email or password)
+        db_user.hashed_password = hashed_password
+        db_user.email = user.email
+    elif db_email and not db_email.is_verified:
+        # Update unverified user by email
+        db_email.hashed_password = hashed_password
+        db_email.username = user.username
+    else:
+        new_user = User(username=user.username, email=user.email, hashed_password=hashed_password, is_verified=False)
+        db.add(new_user)
+        
+    # Generate code
+    code = str(random.randint(100000, 999999))
+    expires = datetime.utcnow() + timedelta(minutes=15)
+    
+    # Remove old register codes for this email
+    db.query(VerificationCode).filter(VerificationCode.email == user.email, VerificationCode.purpose == "register").delete()
+    
+    verification = VerificationCode(email=user.email, code=code, purpose="register", expires_at=expires)
+    db.add(verification)
     db.commit()
-    db.refresh(new_user)
-    return {"message": "Успешная регистрация!"}
+    
+    # Send email
+    html_content = get_email_template(
+        "Подтверждение регистрации",
+        "Используйте этот код, чтобы завершить создание аккаунта в Zephyrus",
+        code
+    )
+    send_email(user.email, "Код подтверждения регистрации Zephyrus", html_content)
+    
+    return {"message": "Код подтверждения отправлен на почту"}
+
+@app.post("/api/auth/verify-email")
+def verify_email(data: VerifyEmail, db: Session = Depends(get_db)):
+    # Find code
+    verification = db.query(VerificationCode).filter(
+        VerificationCode.email == data.email,
+        VerificationCode.code == data.code,
+        VerificationCode.purpose == "register"
+    ).first()
+    
+    if not verification or verification.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Неверный или просроченный код")
+        
+    # Mark user verified
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+        
+    user.is_verified = True
+    db.delete(verification)
+    db.commit()
+    
+    # Generate token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "message": "Email успешно подтвержден"}
 
 @app.post("/api/auth/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
@@ -101,6 +243,9 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
     if not db_user:
         raise HTTPException(status_code=400, detail="Неверный логин или пароль")
+        
+    if not db_user.is_verified:
+        raise HTTPException(status_code=400, detail="Email не подтвержден. Пожалуйста, зарегистрируйтесь снова для получения кода.")
     
     if not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный логин или пароль")
@@ -110,6 +255,53 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         data={"sub": db_user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(data: ForgotPassword, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email, User.is_verified == True).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Аккаунта с такой почтой нет или он не подтвержден. Пожалуйста, зарегистрируйтесь.")
+        
+    code = str(random.randint(100000, 999999))
+    expires = datetime.utcnow() + timedelta(minutes=15)
+    
+    db.query(VerificationCode).filter(VerificationCode.email == data.email, VerificationCode.purpose == "reset").delete()
+    verification = VerificationCode(email=data.email, code=code, purpose="reset", expires_at=expires)
+    db.add(verification)
+    db.commit()
+    
+    html_content = get_email_template(
+        "Сброс пароля",
+        "Вы запросили смену пароля. Введите этот код для продолжения",
+        code
+    )
+    send_email(data.email, "Восстановление пароля Zephyrus", html_content)
+    return {"message": "Если такой email существует, на него отправлен код"}
+
+@app.post("/api/auth/reset-password")
+def reset_password(data: ResetPassword, db: Session = Depends(get_db)):
+    verification = db.query(VerificationCode).filter(
+        VerificationCode.email == data.email,
+        VerificationCode.code == data.code,
+        VerificationCode.purpose == "reset"
+    ).first()
+    
+    if not verification or verification.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Неверный или просроченный код")
+        
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+        
+    # Check if new password is the same as old one
+    if verify_password(data.new_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Новый пароль не может совпадать со старым")
+        
+    user.hashed_password = get_password_hash(data.new_password)
+    db.delete(verification)
+    db.commit()
+    
+    return {"message": "Пароль успешно изменен!"}
 
 @app.get("/api/homepage")
 def get_homepage():
