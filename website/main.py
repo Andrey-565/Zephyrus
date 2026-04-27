@@ -407,6 +407,21 @@ def update_profile(data: UpdateProfile, current_user: User = Depends(get_current
     db.commit()
     return {"message": "Профиль успешно обновлен", "username": current_user.username, "email": current_user.email}
 
+@app.post("/api/auth/delete-account")
+def delete_account(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    password = data.get("password")
+    if not password or not verify_password(password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Неверный пароль")
+    
+    # Delete inventory items first
+    db.query(InventoryItem).filter(InventoryItem.user_id == current_user.id).delete()
+    # Delete verification codes
+    db.query(VerificationCode).filter(VerificationCode.email == current_user.email).delete()
+    # Delete user
+    db.delete(current_user)
+    db.commit()
+    return {"message": "Аккаунт успешно удален"}
+
 @app.get("/api/homepage")
 def get_homepage():
     return {

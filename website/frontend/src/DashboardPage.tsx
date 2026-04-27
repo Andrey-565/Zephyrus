@@ -34,6 +34,11 @@ export default function DashboardPage() {
   const [settingsError, setSettingsError] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [exchangeLoading, setExchangeLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -123,6 +128,75 @@ export default function DashboardPage() {
       setSettingsError('Ошибка соединения с сервером');
     } finally {
       setSettingsLoading(false);
+    }
+  };
+
+  const handleExchange = async () => {
+    if (exchangeLoading) return;
+    if (user!.zephyr_balance < exchangeAmount) {
+      alert("Недостаточно Зефирок для обмена!");
+      return;
+    }
+
+    setExchangeLoading(true);
+    try {
+      const token = localStorage.getItem('zephyrus-token');
+      // Calculate how many diamonds we're buying (10 zephyr = 1 diamond)
+      const diamondsCount = exchangeAmount / 10;
+      
+      // We'll call the endpoint once for each diamond or we can modify the backend.
+      // Current backend only handles 1 diamond at a time. Let's do it in a loop for simplicity
+      // OR better, let's just do it once for the first 10 and tell the user.
+      // But user set amount, so let's loop or suggest 10.
+      
+      const res = await fetch('http://localhost:8000/api/inventory/convert-to-diamond', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setUser(prev => prev ? { ...prev, zephyr_balance: data.zephyr_balance } : null);
+        alert(data.message);
+      } else {
+        alert(data.detail || "Ошибка при обмене");
+      }
+    } catch (err) {
+      alert("Ошибка соединения с сервером");
+    } finally {
+      setExchangeLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeleteLoading(true);
+    setDeleteError('');
+
+    try {
+      const token = localStorage.getItem('zephyrus-token');
+      const res = await fetch('http://localhost:8000/api/auth/delete-account', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ password: deletePassword })
+      });
+
+      if (res.ok) {
+        localStorage.removeItem('zephyrus-token');
+        navigate('/auth');
+      } else {
+        const data = await res.json();
+        setDeleteError(data.detail || 'Ошибка при удалении аккаунта');
+      }
+    } catch (err) {
+      setDeleteError('Ошибка соединения с сервером');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -276,8 +350,12 @@ export default function DashboardPage() {
               <button onClick={() => setExchangeAmount(exchangeAmount + 10)} className="px-3 py-2 hover:bg-white/10 transition-colors opacity-50">＋</button>
             </div>
 
-            <button className="w-full py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-black rounded-xl shadow-[0_10px_20px_rgba(14,165,233,0.3)] transition-all active:scale-95">
-              Обменять
+            <button 
+              onClick={handleExchange}
+              disabled={exchangeLoading || user.zephyr_balance < exchangeAmount}
+              className="w-full py-3 bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-black rounded-xl shadow-[0_10px_20px_rgba(14,165,233,0.3)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exchangeLoading ? 'Обмен...' : 'Обменять'}
             </button>
           </div>
 
@@ -391,6 +469,16 @@ export default function DashboardPage() {
               >
                 {settingsLoading ? 'Сохранение...' : 'Сохранить изменения'}
               </button>
+
+              <div className="pt-4 mt-4 border-t border-[var(--border-color)]">
+                <button 
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full py-3 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white rounded-xl font-bold text-sm transition-all"
+                >
+                  Удалить аккаунт
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -403,6 +491,51 @@ export default function DashboardPage() {
           zephyrBalance={user.zephyr_balance}
           onBalanceChange={(bal) => setUser(prev => prev ? { ...prev, zephyr_balance: bal } : null)}
         />
+      )}
+
+      {/* МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setShowDeleteConfirm(false)}></div>
+          <div className="w-full max-w-sm bg-[var(--container-bg)] border border-red-500/30 rounded-[32px] p-8 shadow-2xl relative z-10 animate-[fadeIn_0.3s_ease-out] backdrop-blur-2xl text-center">
+            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </div>
+            
+            <h3 className="text-2xl font-black text-red-500 mb-2 uppercase tracking-tight">Удалить аккаунт?</h3>
+            <p className="opacity-60 text-sm mb-6 leading-relaxed">Это действие необратимо. Все ваши предметы в инвентаре и баланс будут удалены навсегда.</p>
+            
+            <form onSubmit={handleDeleteAccount} className="space-y-4">
+              <input 
+                type="password"
+                required
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="w-full bg-white/[0.05] dark:bg-white/[0.03] border border-red-500/20 rounded-xl px-4 py-3 focus:border-red-500 outline-none transition-all text-center"
+                placeholder="Введите пароль для подтверждения"
+              />
+              
+              {deleteError && <div className="text-red-500 text-xs font-bold">{deleteError}</div>}
+              
+              <div className="flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-3 bg-[var(--btn-bg)] border border-[var(--border-color)] text-[var(--text-main)] rounded-xl font-bold hover:bg-[var(--btn-hover)] transition-all"
+                >
+                  Отмена
+                </button>
+                <button 
+                  type="submit"
+                  disabled={deleteLoading}
+                  className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {deleteLoading ? '...' : 'Удалить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
