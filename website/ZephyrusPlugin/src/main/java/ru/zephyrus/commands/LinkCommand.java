@@ -50,7 +50,7 @@ public class LinkCommand implements CommandExecutor {
                     player.sendMessage("§c✗ Ошибка: " + msg);
                 }
             },
-            error -> player.sendMessage("§c✗ Ошибка сервера: " + error)
+            error -> player.sendMessage("§c✗ Ошибка сервера (" + plugin.getApiUrl() + "): " + error)
         );
 
         return true;

@@ -87,7 +87,7 @@ public class ChestCommand implements CommandExecutor {
                 player.openInventory(inv);
                 InventoryListener.registerOpen(player.getUniqueId(), mcUuid, unlocked);
             },
-            error -> player.sendMessage("§c✗ Ошибка: " + error)
+            error -> player.sendMessage("§c✗ Ошибка (" + plugin.getApiUrl() + "): " + error)
         );
 
         return true;

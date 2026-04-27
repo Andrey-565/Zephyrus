@@ -83,7 +83,7 @@ public class ExchangeCommand implements CommandExecutor {
             error -> {
                 // Refund diamonds on network error
                 player.getInventory().addItem(new ItemStack(Material.DIAMOND, finalAmount));
-                player.sendMessage("§c✗ Ошибка сети. Алмазы возвращены: " + error);
+                player.sendMessage("§c✗ Ошибка сети (" + plugin.getApiUrl() + "). Алмазы возвращены: " + error);
             }
         );
 
