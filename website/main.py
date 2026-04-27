@@ -253,6 +253,17 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
     
     return {"message": "Код подтверждения отправлен на почту"}
 
+@app.get("/api/auth/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "zephyr_balance": current_user.zephyr_balance,
+        "unlocked_slots": current_user.unlocked_slots,
+        "mc_uuid": current_user.mc_uuid
+    }
+
 @app.post("/api/auth/verify-email")
 def verify_email(data: VerifyEmail, db: Session = Depends(get_db)):
     # Find code
