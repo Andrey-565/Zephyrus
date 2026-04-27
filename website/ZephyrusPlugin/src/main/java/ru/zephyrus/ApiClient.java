@@ -30,8 +30,8 @@ public class ApiClient {
                     conn.setRequestProperty("Content-Type", "application/json");
                     conn.setRequestProperty("x-plugin-secret", plugin.getPluginSecret());
                     conn.setDoOutput(true);
-                    conn.setConnectTimeout(5000);
-                    conn.setReadTimeout(5000);
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(15000);
 
                     byte[] body = jsonBody.getBytes(StandardCharsets.UTF_8);
                     conn.setRequestProperty("Content-Length", String.valueOf(body.length));
@@ -70,8 +70,8 @@ public class ApiClient {
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("GET");
                     conn.setRequestProperty("x-plugin-secret", plugin.getPluginSecret());
-                    conn.setConnectTimeout(5000);
-                    conn.setReadTimeout(5000);
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(15000);
 
                     int code = conn.getResponseCode();
                     java.io.InputStream is = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
