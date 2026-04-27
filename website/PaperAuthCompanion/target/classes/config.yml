@@ -1,0 +1,3 @@
+# Zephyrus Plugin Configuration
+api-url: "http://localhost:8000"
+plugin-secret: "change-this-plugin-secret"

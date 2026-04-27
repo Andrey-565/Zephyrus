@@ -1,0 +1,10 @@
+com\zephyrus\paperauth\PaperAuthCompanion.class
+com\zephyrus\paperauth\ApiClient$1.class
+com\zephyrus\paperauth\listeners\PlayerJoinListener.class
+com\zephyrus\paperauth\ApiClient.class
+com\zephyrus\paperauth\listeners\InventoryListener$OpenInventoryData.class
+com\zephyrus\paperauth\listeners\InventoryListener.class
+com\zephyrus\paperauth\ApiClient$2.class
+com\zephyrus\paperauth\commands\LinkCommand.class
+com\zephyrus\paperauth\commands\ChestCommand.class
+com\zephyrus\paperauth\commands\ExchangeCommand.class

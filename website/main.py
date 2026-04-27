@@ -43,9 +43,10 @@ class User(Base):
     hashed_password = Column(String)
     is_verified = Column(Boolean, default=False)
     mc_uuid = Column(String, nullable=True)
+    auth_ip = Column(String, nullable=True)
     zephyr_balance = Column(Integer, default=0)
     auth_code = Column(String, nullable=True)
-    unlocked_slots = Column(Integer, default=0)
+    unlocked_slots = Column(Integer, default=3)
 
 class VerificationCode(Base):
     __tablename__ = "verification_codes"
@@ -675,7 +676,36 @@ def plugin_sync_inventory(
 # PLUGIN ENDPOINTS (authenticated by PLUGIN_SECRET header)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.post("/api/plugin/verify-link")
+@app.post("/api/plugin/sync-player")
+def plugin_sync_player(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Called by plugin on PlayerJoinEvent. Updates IP and links MC UUID if username matches."""
+    require_plugin(x_plugin_secret)
+    mc_uuid = data.get("mc_uuid", "")
+    username = data.get("username", "")
+    ip = data.get("ip", "")
+
+    if not mc_uuid or not username:
+        return {"success": False, "message": "Missing UUID or username"}
+
+    # 1. Try to find user by mc_uuid
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    
+    # 2. If not found, try to find by username (first-time link)
+    if not user:
+        user = db.query(User).filter(User.username == username).first()
+        if user:
+            user.mc_uuid = mc_uuid # Link the account automatically if names match
+
+    if user:
+        user.auth_ip = ip
+        db.commit()
+        return {"success": true, "message": "Synced", "unlocked_slots": user.unlocked_slots}
+    
+    return {"success": true, "message": "User not registered on site yet"}
 def plugin_verify_link(
     data: dict,
     x_plugin_secret: str = Header(""),
