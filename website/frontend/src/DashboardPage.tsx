@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [exchangeAmount, setExchangeAmount] = useState(10);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('zephyrus-theme') as 'dark' | 'light') || 'dark';
@@ -69,6 +70,7 @@ export default function DashboardPage() {
         }
       } catch (err) {
         console.error("Failed to fetch user:", err);
+        setError("Ошибка соединения с сервером. Убедитесь, что бэкенд запущен.");
       } finally {
         setLoading(false);
       }
@@ -202,7 +204,26 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <div className="bg-canvas"><div className="orb orb-1"></div><div className="orb orb-2"></div><div className="orb orb-3"></div></div>
-        <div className="w-12 h-12 border-4 border-[#7c3aed]/30 border-t-[#7c3aed] rounded-full animate-spin relative z-10"></div>
+        <div className="flex flex-col items-center gap-6 relative z-10">
+          <div className="w-12 h-12 border-4 border-[#7c3aed]/30 border-t-[#7c3aed] rounded-full animate-spin"></div>
+          <p className="text-[var(--text-main)] font-bold animate-pulse">Загрузка данных...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        <div className="bg-canvas"><div className="orb orb-1"></div><div className="orb orb-2"></div><div className="orb orb-3"></div></div>
+        <div className="max-w-sm w-full bg-[var(--container-bg)] border border-red-500/20 rounded-[32px] p-8 text-center relative z-10 backdrop-blur-2xl">
+          <div className="text-red-500 mb-4">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2" className="mx-auto"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h3 className="text-xl font-black mb-2">Ошибка</h3>
+          <p className="opacity-60 text-sm mb-6">{error}</p>
+          <button onClick={() => window.location.reload()} className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl">Попробовать снова</button>
+        </div>
       </div>
     );
   }
