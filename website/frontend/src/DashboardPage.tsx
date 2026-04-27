@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import zephyrIcon from './assets/zephyr_coin.png';
+import InventoryModal from './InventoryModal';
 
 interface UserData {
   id: number;
@@ -22,6 +23,8 @@ export default function DashboardPage() {
 
   // Состояния для настроек
   const [showSettings, setShowSettings] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -226,7 +229,9 @@ export default function DashboardPage() {
             </div>
 
             {/* Инвентарь */}
-            <div className="bg-[var(--feature-bg)] border border-[var(--border-color)] rounded-[32px] p-8 text-center flex flex-col items-center hover:bg-[var(--btn-hover)] transition-all cursor-pointer group h-fit">
+            <div
+              onClick={() => setShowInventory(true)}
+              className="bg-[var(--feature-bg)] border border-[var(--border-color)] rounded-[32px] p-8 text-center flex flex-col items-center hover:bg-[var(--btn-hover)] transition-all cursor-pointer group h-fit">
               <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-500 mb-6 group-hover:scale-110 transition-transform">
                 <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 11v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9"/><path d="M21 11H3V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><rect x="10" y="9" width="4" height="4" rx="1"/></svg>
               </div>
@@ -389,6 +394,15 @@ export default function DashboardPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* МОДАЛЬНОЕ ОКНО ИНВЕНТАРЯ */}
+      {showInventory && user && (
+        <InventoryModal
+          onClose={() => setShowInventory(false)}
+          zephyrBalance={user.zephyr_balance}
+          onBalanceChange={(bal) => setUser(prev => prev ? { ...prev, zephyr_balance: bal } : null)}
+        />
       )}
     </div>
   );

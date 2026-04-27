@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
@@ -21,6 +21,7 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+PLUGIN_SECRET = os.environ.get("PLUGIN_SECRET", "change-this-plugin-secret")
 
 
 # Настройки базы данных PostgreSQL (локальный сервер)
@@ -44,6 +45,7 @@ class User(Base):
     mc_uuid = Column(String, nullable=True)
     zephyr_balance = Column(Integer, default=0)
     auth_code = Column(String, nullable=True)
+    unlocked_slots = Column(Integer, default=0)
 
 class VerificationCode(Base):
     __tablename__ = "verification_codes"
@@ -52,6 +54,16 @@ class VerificationCode(Base):
     code = Column(String, index=True)
     purpose = Column(String) # 'register', 'reset'
     expires_at = Column(DateTime)
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    slot = Column(Integer)           # 0-53 (double chest)
+    item_type = Column(String)       # e.g. "minecraft:diamond"
+    item_count = Column(Integer, default=1)
+    item_name = Column(String)       # display name
+    item_nbt = Column(String, nullable=True)  # optional NBT / extra data
 
 # Создание таблиц (при старте)
 try:
@@ -258,8 +270,15 @@ def verify_email(data: VerifyEmail, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Пользователь не найден")
         
     user.is_verified = True
+    
+    # Генерируем уникальный auth_code для привязки Minecraft-аккаунта
+    import secrets
+    if not user.auth_code:
+        user.auth_code = secrets.token_hex(4).upper()  # e.g. '3412AA00'
+    
     db.delete(verification)
     db.commit()
+
     
     # Generate token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -455,4 +474,259 @@ def get_homepage():
             "privacy": "Политика конфиденциальности проекта Zephyrus\n\n1. Сбор информации\nМы собираем только ту информацию, которая необходима для функционирования вашего аккаунта: ваш никнейм Minecraft, IP-адрес (для защиты от DDoS-атак и ботов) и адрес электронной почты (если вы привязываете его для восстановления пароля).\n\n2. Использование данных\nВаши данные используются исключительно для предоставления доступа к личному кабинету, игровому серверу и обеспечения безопасности вашего аккаунта.\n\n3. Защита данных\nМы используем современные методы шифрования для защиты ваших паролей. Ваши личные данные не передаются третьим лицам ни при каких обстоятельствах, за исключением случаев, предусмотренных законодательством.\n\n4. Файлы Cookie\nНаш сайт использует файлы cookie исключительно для сохранения сессии авторизации (чтобы вам не приходилось входить в аккаунт при каждом посещении) и сохранения ваших настроек (например, выбранной темы сайта)."
         },
         "copyright": "Zephyrus © 2026. Все права защищены. Not an official Minecraft product. Not approved by or associated with Mojang Synergies AB."
+    }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INVENTORY HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+MAX_SLOTS = 54  # double chest
+
+def next_unlock_cost(unlocked: int) -> int:
+    """Cost to unlock the next batch of slots."""
+    if unlocked == 0:
+        return 100   # first 3 slots cost 100 zephyr
+    # each slot after that costs 20 more than the previous
+    return 100 + 20 * (unlocked - 2)
+
+def next_unlock_count(unlocked: int) -> int:
+    """How many slots will be unlocked next."""
+    return 3 if unlocked == 0 else 1
+
+def verify_plugin_secret(x_plugin_secret: str = None):
+    from fastapi import Header
+    pass
+
+def require_plugin(x_plugin_secret: str = ""):
+    if x_plugin_secret != PLUGIN_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid plugin secret")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INVENTORY ENDPOINTS (authenticated user)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/inventory")
+def get_inventory(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    items = db.query(InventoryItem).filter(InventoryItem.user_id == current_user.id).all()
+    items_list = [
+        {
+            "slot": item.slot,
+            "item_type": item.item_type,
+            "item_count": item.item_count,
+            "item_name": item.item_name,
+            "item_nbt": item.item_nbt
+        } for item in items
+    ]
+    unlocked = current_user.unlocked_slots
+    cost = next_unlock_cost(unlocked) if unlocked < MAX_SLOTS else None
+    slots_to_unlock = next_unlock_count(unlocked) if unlocked < MAX_SLOTS else 0
+    return {
+        "unlocked_slots": unlocked,
+        "max_slots": MAX_SLOTS,
+        "next_unlock_cost": cost,
+        "next_unlock_count": slots_to_unlock,
+        "items": items_list
+    }
+
+@app.post("/api/inventory/unlock")
+def unlock_inventory_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    unlocked = current_user.unlocked_slots
+    if unlocked >= MAX_SLOTS:
+        raise HTTPException(status_code=400, detail="Инвентарь уже полностью разблокирован")
+    
+    cost = next_unlock_cost(unlocked)
+    count = next_unlock_count(unlocked)
+    
+    if current_user.zephyr_balance < cost:
+        raise HTTPException(status_code=400, detail=f"Недостаточно Зефирок. Нужно: {cost}, у вас: {current_user.zephyr_balance}")
+    
+    current_user.zephyr_balance -= cost
+    current_user.unlocked_slots += count
+    db.commit()
+    
+    return {
+        "message": f"Разблокировано {count} слот(ов)!",
+        "unlocked_slots": current_user.unlocked_slots,
+        "zephyr_balance": current_user.zephyr_balance
+    }
+
+@app.post("/api/inventory/convert-to-diamond")
+def convert_zephyr_to_diamond(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """10 zephyr → 1 diamond placed into the web inventory."""
+    cost = 10
+    if current_user.zephyr_balance < cost:
+        raise HTTPException(status_code=400, detail="Недостаточно Зефирок (нужно 10)")
+    
+    unlocked = current_user.unlocked_slots
+    # check that there is a free slot in the inventory
+    occupied_slots = {item.slot for item in db.query(InventoryItem).filter(InventoryItem.user_id == current_user.id).all()}
+    free_slot = None
+    for s in range(unlocked):
+        if s not in occupied_slots:
+            free_slot = s
+            break
+    
+    if free_slot is None:
+        raise HTTPException(status_code=400, detail="В инвентаре нет свободных слотов! Разблокируйте больше слотов или освободите место.")
+    
+    current_user.zephyr_balance -= cost
+    diamond = InventoryItem(
+        user_id=current_user.id,
+        slot=free_slot,
+        item_type="minecraft:diamond",
+        item_count=1,
+        item_name="Алмаз"
+    )
+    db.add(diamond)
+    db.commit()
+    
+    return {
+        "message": "1 алмаз добавлен в инвентарь!",
+        "zephyr_balance": current_user.zephyr_balance,
+        "slot": free_slot
+    }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLUGIN ENDPOINTS (authenticated by PLUGIN_SECRET header)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from fastapi import Header
+
+@app.post("/api/plugin/verify-link")
+def plugin_verify_link(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin sends auth_code + mc_uuid to link account."""
+    require_plugin(x_plugin_secret)
+    auth_code = data.get("auth_code", "").upper()
+    mc_uuid = data.get("mc_uuid", "")
+    mc_name = data.get("mc_name", "")
+    
+    user = db.query(User).filter(User.auth_code == auth_code).first()
+    if not user:
+        return {"success": False, "message": "Неверный код привязки"}
+    if user.mc_uuid:
+        return {"success": False, "message": "Аккаунт уже привязан"}
+    
+    user.mc_uuid = mc_uuid
+    db.commit()
+    return {"success": True, "message": f"Аккаунт {user.username} успешно привязан к {mc_name}!"}
+
+@app.post("/api/plugin/deposit-item")
+def plugin_deposit_item(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin places an item into the user's web inventory."""
+    require_plugin(x_plugin_secret)
+    mc_uuid = data.get("mc_uuid", "")
+    item_type = data.get("item_type", "")
+    item_count = int(data.get("item_count", 1))
+    item_name = data.get("item_name", item_type)
+    item_nbt = data.get("item_nbt", None)
+    
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    if not user:
+        return {"success": False, "message": "Аккаунт не найден или не привязан"}
+    
+    occupied_slots = {item.slot for item in db.query(InventoryItem).filter(InventoryItem.user_id == user.id).all()}
+    free_slot = None
+    for s in range(user.unlocked_slots):
+        if s not in occupied_slots:
+            free_slot = s
+            break
+    
+    if free_slot is None:
+        return {"success": False, "message": "Инвентарь заполнен! Разблокируйте больше слотов на сайте."}
+    
+    inv_item = InventoryItem(
+        user_id=user.id,
+        slot=free_slot,
+        item_type=item_type,
+        item_count=item_count,
+        item_name=item_name,
+        item_nbt=item_nbt
+    )
+    db.add(inv_item)
+    db.commit()
+    return {"success": True, "slot": free_slot, "message": f"Предмет {item_name} x{item_count} добавлен в слот {free_slot}"}
+
+@app.post("/api/plugin/diamond-to-zephyr")
+def plugin_diamond_to_zephyr(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin converts 1 diamond from player's game inventory to 10 zephyr."""
+    require_plugin(x_plugin_secret)
+    mc_uuid = data.get("mc_uuid", "")
+    amount = int(data.get("amount", 1))  # number of diamonds
+    
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    if not user:
+        return {"success": False, "message": "Аккаунт не найден или не привязан"}
+    
+    zephyr_earned = amount * 10
+    user.zephyr_balance += zephyr_earned
+    db.commit()
+    return {
+        "success": True,
+        "message": f"+{zephyr_earned} Зефирок!",
+        "new_balance": user.zephyr_balance
+    }
+
+@app.delete("/api/plugin/withdraw-item")
+def plugin_withdraw_item(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin takes an item from web inventory (player opens chest on server)."""
+    require_plugin(x_plugin_secret)
+    mc_uuid = data.get("mc_uuid", "")
+    slot = int(data.get("slot", -1))
+    
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    if not user:
+        return {"success": False, "message": "Аккаунт не найден"}
+    
+    item = db.query(InventoryItem).filter(
+        InventoryItem.user_id == user.id,
+        InventoryItem.slot == slot
+    ).first()
+    
+    if not item:
+        return {"success": False, "message": "Слот пуст"}
+    
+    item_data = {"item_type": item.item_type, "item_count": item.item_count, "item_name": item.item_name, "item_nbt": item.item_nbt}
+    db.delete(item)
+    db.commit()
+    return {"success": True, "item": item_data}
+
+@app.get("/api/plugin/inventory/{mc_uuid}")
+def plugin_get_inventory(
+    mc_uuid: str,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin fetches full inventory state for a player."""
+    require_plugin(x_plugin_secret)
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    if not user:
+        return {"success": False, "message": "Аккаунт не найден"}
+    
+    items = db.query(InventoryItem).filter(InventoryItem.user_id == user.id).all()
+    return {
+        "success": True,
+        "unlocked_slots": user.unlocked_slots,
+        "items": [
+            {"slot": i.slot, "item_type": i.item_type, "item_count": i.item_count, "item_name": i.item_name, "item_nbt": i.item_nbt}
+            for i in items
+        ]
     }

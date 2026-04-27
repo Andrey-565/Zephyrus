@@ -1,0 +1,17 @@
+name: ZephyrusPlugin
+version: 1.0.0
+main: ru.zephyrus.ZephyrusPlugin
+api-version: '1.21'
+description: Zephyrus server integration plugin
+authors: [Zephyrus]
+
+commands:
+  link:
+    description: Link your Minecraft account to the Zephyrus website
+    usage: /link <code>
+  chest:
+    description: Open your cloud inventory
+    usage: /chest
+  exchange:
+    description: Convert diamonds to Zephyr currency
+    usage: /exchange <amount>
