@@ -70,7 +70,7 @@ export default function DashboardPage() {
         }
       } catch (err) {
         console.error("Failed to fetch user:", err);
-        setError("Ошибка соединения с сервером. Убедитесь, что бэкенд запущен.");
+        setError(`Ошибка соединения: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}. Проверьте консоль (F12).`);
       } finally {
         setLoading(false);
       }
