@@ -74,16 +74,20 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-    const data = await res.json();
-    if (res.ok) {
-      showToast(data.message, true);
-      setBalance(data.zephyr_balance);
-      onBalanceChange(data.zephyr_balance);
-      await fetchInv();
-    } else {
-      showToast(data.detail, false);
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message, true);
+        setBalance(data.zephyr_balance);
+        onBalanceChange(data.zephyr_balance);
+        await fetchInv();
+      } else {
+        showToast(data.detail, false);
+      }
+    } catch (err) {
+      showToast('Ошибка соединения с сервером', false);
+    } finally {
+      setUnlocking(false);
     }
-    setUnlocking(false);
   };
 
   const itemMap = new Map<number, InventoryItem>();
