@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@layer base {
+  /* Светлая тема — почти белый фон */
+  :root {
+    --bg-color: #eeeef2;
+    --container-bg: rgba(255, 255, 255, 0.80);
+    --border-color: rgba(0, 0, 0, 0.08);
+    --text-main: #4a5568;
+    --text-title: #7c3aed;
+    --tab-bg: #e0e0e8;
+    --tab-active-bg: rgba(255, 255, 255, 0.95);
+    --tab-text: #6b7280;
+    --tab-active-text: #1a1a2e;
+    --footer-bg: rgba(230, 230, 240, 0.80);
+    --feature-bg: rgba(0, 0, 0, 0.04);
+    --shadow-color: rgba(0, 0, 0, 0.10);
+    --btn-bg: rgba(255, 255, 255, 0.90);
+    --btn-hover: #f5f5fa;
+    --orb-left: rgba(20, 180, 160, 0.12);
+    --orb-right: rgba(150, 30, 200, 0.10);
+    --orb-center: rgba(100, 80, 200, 0.06);
+    --grid-color: rgba(100, 80, 200, 0.05);
+  }
+
+  /* Тёмная тема — ещё глубже */
+  .dark {
+    --bg-color: #0d0e1a;
+    --container-bg: rgba(18, 19, 32, 0.80);
+    --border-color: rgba(255, 255, 255, 0.07);
+    --text-main: #a9b1d6;
+    --text-title: #8b5cf6;
+    --tab-bg: #1a1b2e;
+    --tab-active-bg: rgba(255, 255, 255, 0.06);
+    --tab-text: #a9b1d6;
+    --tab-active-text: #ffffff;
+    --footer-bg: rgba(8, 9, 16, 0.80);
+    --feature-bg: rgba(255, 255, 255, 0.04);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --btn-bg: rgba(18, 19, 32, 0.90);
+    --btn-hover: #1a1b2e;
+    --orb-left: rgba(15, 160, 130, 0.30);
+    --orb-right: rgba(160, 20, 210, 0.28);
+    --orb-center: rgba(60, 40, 180, 0.12);
+    --grid-color: rgba(100, 80, 220, 0.04);
+  }
+
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    transition: background-color 0.6s ease, color 0.5s ease;
+  }
+}
+
+/* Анимации орбов */
+@keyframes orbFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -60px) scale(1.1); }
+  66% { transform: translate(-30px, 30px) scale(0.95); }
+}
+@keyframes orbFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-50px, 40px) scale(1.05); }
+  66% { transform: translate(60px, -20px) scale(1.1); }
+}
+@keyframes orbFloat3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, 50px) scale(1.08); }
+}
+
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: -20;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  transition: background-color 0.6s ease;
+}
+
+/* Тонкая сетка */
+.bg-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transition: background-image 0.6s ease;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  transition: background 0.6s ease, width 0.6s ease, height 0.6s ease;
+}
+/* Левый бирюзовый орб */
+.orb-1 {
+  width: 700px;
+  height: 700px;
+  top: -50px;
+  left: -200px;
+  background: var(--orb-left);
+  animation: orbFloat1 20s ease-in-out infinite;
+}
+/* Правый пурпурный орб */
+.orb-2 {
+  width: 650px;
+  height: 650px;
+  bottom: -100px;
+  right: -180px;
+  background: var(--orb-right);
+  animation: orbFloat2 25s ease-in-out infinite;
+}
+/* Центральный орб для глубины */
+.orb-3 {
+  width: 300px;
+  height: 300px;
+  top: 55%;
+  left: 45%;
+  background: var(--orb-center);
+  animation: orbFloat3 18s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
