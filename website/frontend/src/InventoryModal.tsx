@@ -35,7 +35,6 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
   const [inv, setInv] = useState<InventoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [unlocking, setUnlocking] = useState(false);
-  const [converting, setConverting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [balance, setBalance] = useState(zephyrBalance);
 
@@ -78,22 +77,7 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
     setUnlocking(false);
   };
 
-  const handleConvert = async () => {
-    setConverting(true);
-    const res = await fetch('http://localhost:8000/api/inventory/convert-to-diamond', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await res.json();
-    if (res.ok) {
-      showToast(data.message, true);
-      setBalance(data.zephyr_balance);
-      onBalanceChange(data.zephyr_balance);
-      await fetchInv();
-    } else {
-      showToast(data.detail, false);
-    }
-    setConverting(false);
+    setUnlocking(false);
   };
 
   const itemMap = new Map<number, InventoryItem>();
@@ -166,13 +150,13 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
         )}
 
         {/* Footer Actions */}
-        <div className="mt-4 flex flex-col sm:flex-row gap-3">
+        <div className="mt-4 flex justify-center">
           {/* Unlock slots */}
           {inv && inv.unlocked_slots < TOTAL_SLOTS && (
             <button
               onClick={handleUnlock}
               disabled={unlocking || balance < (inv.next_unlock_cost ?? 0)}
-              className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-black rounded-xl shadow-lg shadow-purple-500/20 transition-all active:scale-95 text-sm"
+              className="w-full sm:w-2/3 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-black rounded-xl shadow-lg shadow-purple-500/20 transition-all active:scale-95 text-sm"
             >
               {unlocking ? 'Разблокировка...' : (
                 inv.unlocked_slots === 0
@@ -181,15 +165,6 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
               )}
             </button>
           )}
-
-          {/* Convert to diamond */}
-          <button
-            onClick={handleConvert}
-            disabled={converting || balance < 10}
-            className="flex-1 py-3 bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white font-black rounded-xl shadow-lg shadow-sky-500/20 transition-all active:scale-95 text-sm"
-          >
-            {converting ? 'Конвертация...' : '10 🪙 → 1 💎 в инвентарь'}
-          </button>
         </div>
 
         {/* Hint */}
