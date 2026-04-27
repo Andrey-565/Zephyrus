@@ -152,8 +152,10 @@ export default function DashboardPage() {
       const res = await fetch('/api/inventory/convert-to-diamond', {
         method: 'POST',
         headers: { 
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify({ amount: exchangeAmount / 10 })
       });
 
       const data = await res.json();

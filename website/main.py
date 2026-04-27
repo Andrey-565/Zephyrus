@@ -567,41 +567,71 @@ def unlock_inventory_slots(current_user: User = Depends(get_current_user), db: S
 
 @app.post("/api/inventory/convert-to-diamond")
 def convert_zephyr_to_diamond(
+    data: dict = {},
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """10 zephyr → 1 diamond placed into the web inventory."""
-    cost = 10
-    if current_user.zephyr_balance < cost:
-        raise HTTPException(status_code=400, detail="Недостаточно Зефирок (нужно 10)")
+    """10 zephyr → 1 diamond. Tries to stack diamonds in inventory."""
+    diamond_count = data.get("amount", 1)
+    if diamond_count < 1: diamond_count = 1
     
-    unlocked = current_user.unlocked_slots
-    # check that there is a free slot in the inventory
-    occupied_slots = {item.slot for item in db.query(InventoryItem).filter(InventoryItem.user_id == current_user.id).all()}
-    free_slot = None
-    for s in range(unlocked):
-        if s not in occupied_slots:
-            free_slot = s
-            break
+    cost_per_diamond = 10
+    total_cost = cost_per_diamond * diamond_count
     
-    if free_slot is None:
-        raise HTTPException(status_code=400, detail="В инвентаре нет свободных слотов! Разблокируйте больше слотов или освободите место.")
+    if current_user.zephyr_balance < total_cost:
+        raise HTTPException(status_code=400, detail=f"Недостаточно Зефирок (нужно {total_cost})")
     
-    current_user.zephyr_balance -= cost
-    diamond = InventoryItem(
-        user_id=current_user.id,
-        slot=free_slot,
-        item_type="minecraft:diamond",
-        item_count=1,
-        item_name="Алмаз"
-    )
-    db.add(diamond)
+    # 1. Try to find existing diamond stacks that are not full
+    existing_stacks = db.query(InventoryItem).filter(
+        InventoryItem.user_id == current_user.id,
+        InventoryItem.item_type == "minecraft:diamond",
+        InventoryItem.item_count < 64
+    ).order_by(InventoryItem.slot).all()
+    
+    diamonds_to_add = diamond_count
+    
+    for stack in existing_stacks:
+        space = 64 - stack.item_count
+        add = min(space, diamonds_to_add)
+        stack.item_count += add
+        diamonds_to_add -= add
+        if diamonds_to_add <= 0: break
+    
+    # 2. If diamonds still remain, find free slots
+    if diamonds_to_add > 0:
+        unlocked = current_user.unlocked_slots
+        items = db.query(InventoryItem).filter(InventoryItem.user_id == current_user.id).all()
+        occupied_slots = {item.slot for item in items}
+        
+        while diamonds_to_add > 0:
+            free_slot = None
+            for s in range(unlocked):
+                if s not in occupied_slots:
+                    free_slot = s
+                    break
+            
+            if free_slot is None:
+                db.rollback()
+                raise HTTPException(status_code=400, detail="В инвентаре нет свободных слотов! Разблокируйте больше слотов или освободите место.")
+            
+            add = min(64, diamonds_to_add)
+            new_item = InventoryItem(
+                user_id=current_user.id,
+                slot=free_slot,
+                item_type="minecraft:diamond",
+                item_count=add,
+                item_name="Алмаз"
+            )
+            db.add(new_item)
+            occupied_slots.add(free_slot)
+            diamonds_to_add -= add
+
+    current_user.zephyr_balance -= total_cost
     db.commit()
     
     return {
-        "message": "1 алмаз добавлен в инвентарь!",
-        "zephyr_balance": current_user.zephyr_balance,
-        "slot": free_slot
+        "message": f"Получено алмазов: {diamond_count}!",
+        "zephyr_balance": current_user.zephyr_balance
     }
 
 @app.post("/api/plugin/sync-inventory")
