@@ -106,7 +106,7 @@ export default function DashboardPage() {
 
     try {
       const token = localStorage.getItem('zephyrus-token');
-      const res = await fetch('http://localhost:8000/api/auth/update-profile', {
+      const res = await fetch('/api/auth/update-profile', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
