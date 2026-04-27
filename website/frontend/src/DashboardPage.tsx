@@ -39,6 +39,12 @@ export default function DashboardPage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const showToast = (msg: string, ok: boolean = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -134,21 +140,13 @@ export default function DashboardPage() {
   const handleExchange = async () => {
     if (exchangeLoading) return;
     if (user!.zephyr_balance < exchangeAmount) {
-      alert("Недостаточно Зефирок для обмена!");
+      showToast("Недостаточно Зефирок для обмена!", false);
       return;
     }
 
     setExchangeLoading(true);
     try {
       const token = localStorage.getItem('zephyrus-token');
-      // Calculate how many diamonds we're buying (10 zephyr = 1 diamond)
-      const diamondsCount = exchangeAmount / 10;
-      
-      // We'll call the endpoint once for each diamond or we can modify the backend.
-      // Current backend only handles 1 diamond at a time. Let's do it in a loop for simplicity
-      // OR better, let's just do it once for the first 10 and tell the user.
-      // But user set amount, so let's loop or suggest 10.
-      
       const res = await fetch('http://localhost:8000/api/inventory/convert-to-diamond', {
         method: 'POST',
         headers: { 
@@ -159,12 +157,12 @@ export default function DashboardPage() {
       const data = await res.json();
       if (res.ok) {
         setUser(prev => prev ? { ...prev, zephyr_balance: data.zephyr_balance } : null);
-        alert(data.message);
+        showToast(data.message, true);
       } else {
-        alert(data.detail || "Ошибка при обмене");
+        showToast(data.detail || "Ошибка при обмене", false);
       }
     } catch (err) {
-      alert("Ошибка соединения с сервером");
+      showToast("Ошибка соединения с сервером", false);
     } finally {
       setExchangeLoading(false);
     }
@@ -275,7 +273,7 @@ export default function DashboardPage() {
                 className="bg-blue-500/10 border border-blue-500/20 px-6 py-2 rounded-xl flex items-center gap-3 text-blue-500 font-bold group cursor-pointer active:scale-95 transition-all" 
                 onClick={() => {
                   navigator.clipboard.writeText(`/link ${user.auth_code}`);
-                  alert('Команда скопирована!');
+                  showToast('Команда скопирована!', true);
                 }}
               >
                 <code className="tracking-wider">/link {user.auth_code}</code>
@@ -491,6 +489,20 @@ export default function DashboardPage() {
           zephyrBalance={user.zephyr_balance}
           onBalanceChange={(bal) => setUser(prev => prev ? { ...prev, zephyr_balance: bal } : null)}
         />
+      )}
+
+      {/* ТОСТ-УВЕДОМЛЕНИЕ */}
+      {toast && (
+        <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-black text-sm shadow-2xl animate-[fadeIn_0.3s_ease-out] z-[500] backdrop-blur-xl border border-white/10 ${toast.ok ? 'bg-green-500/90' : 'bg-red-500/90'}`}>
+          <div className="flex items-center gap-3">
+            {toast.ok ? (
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            )}
+            {toast.msg}
+          </div>
+        </div>
       )}
 
       {/* МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ */}
