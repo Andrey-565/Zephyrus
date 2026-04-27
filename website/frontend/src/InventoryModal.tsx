@@ -150,9 +150,15 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
                         onError={(e) => { 
                           const target = e.target as HTMLImageElement;
                           const name = item.item_type.replace('minecraft:', '');
-                          if (!target.src.includes('mcasset.cloud')) {
+                          
+                          // Fallback chain: 3D -> Item -> Block -> Barrier
+                          if (target.src.includes('render.crafty.gg')) {
                             target.src = `https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/${name}.png`;
-                          } else {
+                          } else if (target.src.includes('textures/item/')) {
+                            target.src = `https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/block/${name}.png`;
+                          } else if (target.src.includes('textures/block/')) {
+                            // Some blocks have specific texture names (e.g. stone_stairs doesn't exist, but stone does)
+                            // or they are just missing. Try one more guess or go to barrier.
                             target.src = 'https://assets.mcasset.cloud/1.21.1/assets/minecraft/textures/item/barrier.png';
                           }
                         }}
