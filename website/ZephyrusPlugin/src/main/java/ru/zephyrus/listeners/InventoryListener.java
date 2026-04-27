@@ -53,35 +53,44 @@ public class InventoryListener implements Listener {
         // Check inventory title to confirm it's our cloud chest
         if (!event.getView().getTitle().contains("Облачный инвентарь")) return;
 
-        // Sync changes back to server: deposit items placed by player
+        // Collect all items in unlocked slots
+        StringBuilder itemsJson = new StringBuilder("[");
+        boolean first = true;
+
         for (int slot = 0; slot < data.unlockedSlots(); slot++) {
             ItemStack item = event.getInventory().getItem(slot);
             if (item == null || item.getType() == Material.AIR
                     || item.getType() == Material.GRAY_STAINED_GLASS_PANE) continue;
 
-            // Only deposit items that the player manually placed (we can't easily track this
-            // without per-slot state, so we deposit everything in the unlocked area)
+            if (!first) itemsJson.append(",");
+            first = false;
+
             String itemType = "minecraft:" + item.getType().name().toLowerCase();
             String itemName = item.hasItemMeta() && item.getItemMeta().hasDisplayName()
                 ? item.getItemMeta().getDisplayName().replace("§f", "")
                 : item.getType().name();
             int count = item.getAmount();
-            final int finalSlot = slot;
 
-            String json = String.format(
-                "{\"mc_uuid\":\"%s\",\"item_type\":\"%s\",\"item_count\":%d,\"item_name\":\"%s\"}",
-                data.mcUuid(), itemType, count, itemName
-            );
-
-            api.post("/api/plugin/deposit-item", json,
-                response -> {
-                    if (!response.contains("\"success\":true")) {
-                        player.sendMessage("§cОшибка при сохранении предмета в слоте " + finalSlot);
-                    }
-                },
-                error -> player.sendMessage("§cОшибка сети при сохранении инвентаря: " + error)
-            );
+            itemsJson.append(String.format(
+                "{\"slot\":%d,\"item_type\":\"%s\",\"item_count\":%d,\"item_name\":\"%s\"}",
+                slot, itemType, count, itemName
+            ));
         }
+        itemsJson.append("]");
+
+        String json = String.format(
+            "{\"mc_uuid\":\"%s\",\"items\":%s}",
+            data.mcUuid(), itemsJson.toString()
+        );
+
+        api.post("/api/plugin/sync-inventory", json,
+            response -> {
+                if (!response.contains("\"success\":true")) {
+                    player.sendMessage("§c✗ Ошибка синхронизации инвентаря с сайтом.");
+                }
+            },
+            error -> player.sendMessage("§c✗ Ошибка сети при синхронизации: " + error)
+        );
     }
 
     record OpenInventoryData(String mcUuid, int unlockedSlots) {}

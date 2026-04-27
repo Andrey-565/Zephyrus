@@ -604,6 +604,43 @@ def convert_zephyr_to_diamond(
         "slot": free_slot
     }
 
+@app.post("/api/plugin/sync-inventory")
+def plugin_sync_inventory(
+    data: dict,
+    x_plugin_secret: str = Header(""),
+    db: Session = Depends(get_db)
+):
+    """Plugin replaces the entire inventory state for a user (called on chest close)."""
+    require_plugin(x_plugin_secret)
+    mc_uuid = data.get("mc_uuid", "")
+    items_data = data.get("items", []) # List of {slot, item_type, item_count, item_name, item_nbt}
+    
+    user = db.query(User).filter(User.mc_uuid == mc_uuid).first()
+    if not user:
+        return {"success": False, "message": "Аккаунт не найден"}
+    
+    # Delete all existing items for this user
+    db.query(InventoryItem).filter(InventoryItem.user_id == user.id).delete()
+    
+    # Add new items
+    for item in items_data:
+        slot = item.get("slot")
+        # Security: only allow saving items in unlocked slots
+        if slot < 0 or slot >= user.unlocked_slots: continue
+        
+        new_item = InventoryItem(
+            user_id=user.id,
+            slot=slot,
+            item_type=item.get("item_type"),
+            item_count=int(item.get("item_count", 1)),
+            item_name=item.get("item_name", ""),
+            item_nbt=item.get("item_nbt", None)
+        )
+        db.add(new_item)
+    
+    db.commit()
+    return {"success": True}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PLUGIN ENDPOINTS (authenticated by PLUGIN_SECRET header)
 # ─────────────────────────────────────────────────────────────────────────────
