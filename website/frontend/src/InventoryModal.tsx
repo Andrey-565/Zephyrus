@@ -77,9 +77,6 @@ export default function InventoryModal({ onClose, zephyrBalance, onBalanceChange
     setUnlocking(false);
   };
 
-    setUnlocking(false);
-  };
-
   const itemMap = new Map<number, InventoryItem>();
   inv?.items.forEach(i => itemMap.set(i.slot, i));
 
