@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
@@ -644,8 +644,6 @@ def plugin_sync_inventory(
 # ─────────────────────────────────────────────────────────────────────────────
 # PLUGIN ENDPOINTS (authenticated by PLUGIN_SECRET header)
 # ─────────────────────────────────────────────────────────────────────────────
-
-from fastapi import Header
 
 @app.post("/api/plugin/verify-link")
 def plugin_verify_link(
